@@ -6,6 +6,7 @@ import pandas as pd
 # streamlit run main.py no terminal
 
 
+# Funcao para calular estatisticas
 def calc_general_estats(df):
     df_data = df.groupby(by="Data")[["Valor"]].sum()
     df_data["lag_1"] = df_data["Valor"].shift(1)
@@ -87,6 +88,7 @@ if file_upload:
     # Estatisticas Gerais
     df_stats = calc_general_estats(df)
 
+    # Configuracao de exibicao dos valores
     columns_config = {
         "Valor": st.column_config.NumberColumn("Valor", format="R$ %.2f"),
         "Diferença Mensal Abs": st.column_config.NumberColumn(
@@ -105,9 +107,52 @@ if file_upload:
             "Diferença Mensal Rel", format="percent"
         ),
     }
+
     exp3 = st.expander("Estatísticas Gerais")
     exp3.dataframe(df_stats, hide_index=False, column_config=columns_config)
 
     abs_cols = ["Diferença Mensal Abs", "Média 6M - Diferença Mensal",
                 "Média 12M - Diferença Mensal", "Média 24M - Diferença Mensal"]
     exp3.line_chart(df_stats[abs_cols])
+
+    with st.expander("Metas"):
+        # Dividindo a visualizacao em duas abas
+        col1, col2 = st.columns(2)
+        data_inicio_meta = col1.date_input("Início de Meta",
+                                           max_value=df_stats.index.max())
+
+        # Indices que antecendem a data recebida
+        filter_data = df_stats.index <= data_inicio_meta
+        data_filtrada = df_stats.index[filter_data][-1]
+
+        custos_fixos = col1.number_input("Custos Fixos", min_value=0.,
+                                         format="%.2f")
+        salario_bruto = col2.number_input("Salário Bruto", min_value=0.,
+                                          format="%.2f")
+        salario_liquido = col2.number_input("Salário Líquido", min_value=0.,
+                                            format="%.2f")
+
+        valor_inicio = df_stats.loc[data_filtrada]["Valor"]
+        col1.markdown(f"**Valor no Início da Meta**: R$ {valor_inicio:.2f}")
+
+        col1_pot, col2_pot = st.columns(2)
+        mensal = salario_liquido - custos_fixos
+        anual = mensal*12
+
+        # Container com border criar tipo um card com informacao
+        with col1_pot.container(border=True):
+            st.markdown(f"**Potencial Arrecadação Mês**: \n\nR$ {mensal:.2f}")
+
+        with col2_pot.container(border=True):
+            st.markdown(f"**Potencial Arrecadação Anual**: \n\n R$ {anual:.2f}")
+
+        with st.container(border=True):
+            col1_meta, col2_meta = st.columns(2)
+            with col1_meta:
+                meta_estipulada = st.number_input("Meta estipulada",
+                                                  min_value=0., format="%.2f",
+                                                  value=anual)
+
+            with col2_meta:
+                patrimonio = meta_estipulada + valor_inicio
+                st.markdown(f"**Patrimônio Estimado pós meta:** \n\n R$ {patrimonio:.2f}")
