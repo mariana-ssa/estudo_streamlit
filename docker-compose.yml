@@ -1,0 +1,7 @@
+services:
+  streamlit:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:  # monta o app como volume para nao precisar ficar fazendo rebuild em cada alteracao
+      - ./main.py:/app/main.py 
