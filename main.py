@@ -1,9 +1,28 @@
 import streamlit as st
 import pandas as pd
+import requests
+import datetime
+
 
 # Lista de icones
 # https://streamlit-emoji-shortcodes-streamlit-app-gwckff.streamlit.app/
 # streamlit run main.py no terminal
+
+# Vai ficar em cache por 1 dia
+@st.cache_data(ttl="1day")
+def get_selic():
+    # Funcao para pegar taxa selic da api do banco central
+    url = "https://bcb.gov.br/api/servico/sitebcb/historicotaxasjuros"
+    resp = requests.get(url)
+    conteudo = resp.json()["conteudo"]
+    df = pd.DataFrame(conteudo)
+
+    df["DataInicioVigencia"] = pd.to_datetime(df["DataInicioVigencia"]).dt.date
+    df["DataFimVigencia"] = pd.to_datetime(df["DataFimVigencia"]).dt.date
+    df["DataFimVigencia"] = df["DataFimVigencia"].fillna(
+        datetime.datetime.today().date())
+
+    return df
 
 
 # Funcao para calular estatisticas
@@ -25,8 +44,6 @@ def calc_general_estats(df):
 
 st.set_page_config(page_title="Projeto Téo Me Why",
                    page_icon=":woman_technologist:")
-
-st.text("Olá, mundo")
 
 st.markdown("""
 # Boas vindas!
@@ -135,16 +152,31 @@ if file_upload:
         valor_inicio = df_stats.loc[data_filtrada]["Valor"]
         col1.markdown(f"**Valor no Início da Meta**: R$ {valor_inicio:.2f}")
 
+        # Atualizando valores pela taxa selic
+        selic_gov = get_selic()
+        filter_selic_date = (selic_gov["DataInicioVigencia"] < data_inicio_meta) & (selic_gov["DataFimVigencia"] > data_inicio_meta)  # noqa
+        selic_default = selic_gov[filter_selic_date]["MetaSelic"].iloc[0]
+        selic = st.number_input(
+            "Taxa Selic", min_value=0., value=selic_default, format="%.2f"
+        )
+        selic_ano = selic/100
+        selic_mes = (1 + selic_ano)**(1/12) - 1
+
+        rendimento_ano = valor_inicio * selic_ano
+        rendimento_mes = valor_inicio * selic_mes
+
         col1_pot, col2_pot = st.columns(2)
-        mensal = salario_liquido - custos_fixos
-        anual = mensal*12
+        mensal = salario_liquido - custos_fixos + valor_inicio*selic_mes
+        anual = (salario_liquido - custos_fixos)*12 + (valor_inicio*selic_ano)
 
         # Container com border criar tipo um card com informacao
         with col1_pot.container(border=True):
-            st.markdown(f"**Potencial Arrecadação Mês**: \n\nR$ {mensal:.2f}")
+            st.markdown(f"**Potencial Arrecadação Mês**: \n\nR$ {mensal:.2f}",
+                        help=f"{salario_liquido:.2f} - {custos_fixos:.2f} + {rendimento_mes:.2f}")  # noqa
 
         with col2_pot.container(border=True):
-            st.markdown(f"**Potencial Arrecadação Anual**: \n\n R$ {anual:.2f}")
+            st.markdown(f"**Potencial Arrecadação Anual**: \n\n R$ {anual:.2f}",  # noqa
+                        help=f"12 * ({salario_liquido:.2f} - {custos_fixos:.2f}) + {rendimento_ano:.2f}")  # noqa
 
         with st.container(border=True):
             col1_meta, col2_meta = st.columns(2)
@@ -155,4 +187,4 @@ if file_upload:
 
             with col2_meta:
                 patrimonio = meta_estipulada + valor_inicio
-                st.markdown(f"**Patrimônio Estimado pós meta:** \n\n R$ {patrimonio:.2f}")
+                st.markdown(f"**Patrimônio Estimado pós meta:** \n\n R$ {patrimonio:.2f}")  # noqa
